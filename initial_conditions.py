@@ -66,8 +66,8 @@ class Heaviside(Function):
         return y
 
 
-class Ramp(Function):
-    name = "ramp"
+class LinearRamp(Function):
+    name = "linear ramp"
 
     def __init__(self, epsilon):
         self.eps = epsilon
@@ -81,8 +81,8 @@ class Ramp(Function):
         return y
 
 
-class SmoothJump(Function):
-    name = "smooth jump"
+class SmoothRamp(Function):
+    name = "smooth ramp"
 
     def __init__(self, epsilon):
         self.eps = epsilon
