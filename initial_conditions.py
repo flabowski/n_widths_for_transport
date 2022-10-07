@@ -41,10 +41,10 @@ class Function:
         return
 
     def plot(self, x, ax=None, **kwargs):
-        print(kwargs)
+        # print(kwargs)
         test_sample = x.size//2
         mu = x[test_sample]
-        print(mu)
+        print("mu_test = ", mu)
         if not ax:
             fig, ax = plt.subplots()
         ax.plot(x, self.u(x, mu), ".", **kwargs)
@@ -102,6 +102,82 @@ class SmoothRamp(Function):
         return y
 
 
+def move_x_intercept(u):
+    def _impl(self, x, mu):
+        x_ = x-mu+self.eps/2
+        # we need to call u directly, since self.u is wrapped
+        y = u(self, x_)
+        y[x_ > self.eps] = 1.0
+        y[x_ < 0] = 0.0
+        return y
+    return _impl
+
+
+class CkRamp(Function):
+    name = "C^k smooth ramp"
+
+    def __init__(self, epsilon, k):
+        self.eps = epsilon
+        if k == 0:
+            self.name = "smooth ramp, C^0"
+            self.u = self.u0
+        elif k == 1:
+            self.name = "smooth ramp, C^1"
+            self.u = self.u1
+        elif k == 2:
+            self.name = "smooth ramp, C^2"
+            self.u = self.u2
+        elif k == 3:
+            self.name = "smooth ramp, C^3"
+            self.u = self.u3
+        elif k == 4:
+            self.name = "smooth ramp, C^4"
+            self.u = self.u4
+        elif k == 5:
+            self.name = "smooth ramp, C^5"
+            self.u = self.u5
+        else:
+            raise NotImplementedError
+        return
+
+    @move_x_intercept
+    def u0(self, x):
+        y = 1/self.eps * x
+        return y
+
+    @move_x_intercept
+    def u1(self, x):
+        e = self.eps
+        y = -2/e**3 * x**3 + 3/e**2*x**2
+        return y
+
+    @move_x_intercept
+    def u2(self, x):
+        e = self.eps
+        y = 6/e**5*x**5 - 15/e**4*x**4 + 10/e**3*x**3
+        return y
+
+    @move_x_intercept
+    def u3(self, x):
+        e = self.eps
+        y = -20/e**7 * x**7 + 70/e**6 * x**6 - 84/e**5 * x**5 + 35/e**4 * x**4
+        return y
+
+    @move_x_intercept
+    def u4(self, x):
+        e = self.eps
+        y = (70/e**9*x**9 - 315/e**8*x**8 + 540/e**7*x**7
+             - 420/e**6*x**6 + 126/e**5*x**5)
+        return y
+
+    @move_x_intercept
+    def u5(self, x):
+        e = self.eps
+        y = (-252/e**11*x**11 + 1386/e**10*x**10 - 3080/e**9*x**9
+             + 3465/e**8*x**8 - 1980/e**7*x**7 + 462/e**6*x**6)
+        return y
+
+
 class Sigmoid(Function):
     name = "sigmoid"
 
@@ -116,13 +192,27 @@ class Sigmoid(Function):
 
 if __name__ == "__main__":
     plt.close("all")
-    x = Domain([0, 1], 100)
+    x = Domain([0, 1], 1000)
     mu = Domain([0, 1], 100)
-    u1 = Heaviside()
-    u2 = Ramp(0.025)
-    u3 = SmoothJump(0.025)
-    u4 = Sigmoid(50)
-    for u in [u1, u2, u3, u4]:
+    u0 = CkRamp(0.025*2, 0)
+    u1 = CkRamp(0.025*2, 1)
+    u2 = CkRamp(0.025*2, 2)
+    u3 = CkRamp(0.025*2, 3)
+    u4 = CkRamp(0.025*2, 4)
+
+    u5 = Heaviside()
+    u6 = LinearRamp(0.025)
+    u7 = SmoothRamp(0.025)
+    u8 = Sigmoid(50)
+
+    y_old = u7(x(), 0.5)
+    y_new = u1(x(), 0.5)
+    fig, ax = plt.subplots()
+    ax.plot(x(), y_old, "go", label="alt (2 intervalle)")
+    ax.plot(x(), y_new, "r.", label="neu (p3)")
+    ax.legend()
+    plt.show()
+    for u in [u1, u2, u3, u4, u5]:
         print(u.name)
         u.plot(x())
         X = u(x(), mu())
