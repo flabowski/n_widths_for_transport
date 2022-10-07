@@ -6,6 +6,7 @@ Created on Tue Sep 13 14:49:18 2022
 """
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
 
 
 class Domain:
@@ -40,18 +41,44 @@ class Function:
     def u(self, x, mu):
         return
 
-    def plot(self, x, ax=None, **kwargs):
-        # print(kwargs)
+    def most_central_mu(self, x):
         test_sample = x.size//2
         mu = x[test_sample]
         print("mu_test = ", mu)
+        return mu
+
+    def plot(self, x, ax=None, **kwargs):
+        # print(kwargs)
+        mu = self.most_central_mu(x)
+        y = self.u(x, mu)
         if not ax:
             fig, ax = plt.subplots()
-        ax.plot(x, self.u(x, mu), ".", **kwargs)
+        ax.plot(x, y, ".", **kwargs)
         ax.set_xlabel("x")
         ax.set_ylabel("u(x; mu={:.4f})".format(mu))
         if not ax:
             plt.show()
+        return
+
+    def fit_to(self, some_ramp, x):
+        mu = self.most_central_mu(x)
+
+        def func(x, p):
+            self.eps = p
+            return self.u(x, mu)
+
+        yy = some_ramp(x, mu)
+        eps_guess = 0.05
+        popt, pcov = curve_fit(func, x, yy, [eps_guess])
+        self.eps = popt[0]
+        # print(popt, self.eps)
+        # y_hat = func(x, popt[0])
+        fig, ax = plt.subplots()
+        ax.plot(x, yy, "go")
+        self.plot(x, ax)
+        # ax.plot(x, y_hat, "r.")
+        plt.xlim([0.45, 0.55])
+        plt.show()
         return
 
 
@@ -182,11 +209,11 @@ class Sigmoid(Function):
     name = "sigmoid"
 
     def __init__(self, a):
-        self.a = a
+        self.eps = 1/a
         return
 
     def u(self, x, mu):
-        a = self.a
+        a = 1/self.eps
         return 1.0 / (1+np.e**(-(x-mu)*a))
 
 
@@ -212,8 +239,9 @@ if __name__ == "__main__":
     ax.plot(x(), y_new, "r.", label="neu (p3)")
     ax.legend()
     plt.show()
-    for u in [u1, u2, u3, u4, u5]:
+    for u in [u1, u2, u3, u4, u5, u6, u7, u8]:
         print(u.name)
+        u.fit_to(u6, x())
         u.plot(x())
         X = u(x(), mu())
         fig, ax = plt.subplots()
