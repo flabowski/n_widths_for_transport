@@ -71,7 +71,7 @@ class Function:
         eps_guess = 0.05
         popt, pcov = curve_fit(func, x, yy, [eps_guess])
         self.eps = popt[0]
-        # print(popt, self.eps)
+        print("epsilon = ", self.eps)
         # y_hat = func(x, popt[0])
         fig, ax = plt.subplots()
         ax.plot(x, yy, "go")
@@ -219,18 +219,29 @@ class Sigmoid(Function):
 
 if __name__ == "__main__":
     plt.close("all")
-    x = Domain([0, 1], 1000)
+    x = Domain([0, 1], 10000)
     mu = Domain([0, 1], 100)
     u0 = CkRamp(0.025*2, 0)
     u1 = CkRamp(0.025*2, 1)
     u2 = CkRamp(0.025*2, 2)
     u3 = CkRamp(0.025*2, 3)
     u4 = CkRamp(0.025*2, 4)
+    u5 = CkRamp(0.025*2, 5)
+    for u in [u0, u1, u2, u3, u4, u5]:
+        x_ = x()
+        f_x = u(x_, .5)
+        fig, axs = plt.subplots(6, 1, sharex=True)
+        for i in range(6):
+            axs[i].plot(x_, f_x, "bo")
+            plt.xlim([.45, .55])
+            plt.show()
+            f_x = np.diff(f_x)
+            x_ = (x_[1:]+x_[:-1])/2
 
-    u5 = Heaviside()
-    u6 = LinearRamp(0.025)
-    u7 = SmoothRamp(0.025)
-    u8 = Sigmoid(50)
+    u6 = Heaviside()
+    u7 = LinearRamp(0.025)
+    u8 = SmoothRamp(0.025)
+    u9 = Sigmoid(50)
 
     y_old = u7(x(), 0.5)
     y_new = u1(x(), 0.5)
@@ -239,11 +250,12 @@ if __name__ == "__main__":
     ax.plot(x(), y_new, "r.", label="neu (p3)")
     ax.legend()
     plt.show()
-    for u in [u1, u2, u3, u4, u5, u6, u7, u8]:
+    for u in [u0, u1, u2, u3, u4, u5, u6, u7, u8]:
         print(u.name)
-        u.fit_to(u6, x())
+        u.fit_to(u7, x())
         u.plot(x())
-        X = u(x(), mu())
-        fig, ax = plt.subplots()
-        ax.imshow(X, interpolation="nearest")
-        plt.show()
+        plt.title(u.name)
+        # X = u(x(), mu())
+        # fig, ax = plt.subplots()
+        # ax.imshow(X, interpolation="nearest")
+        # plt.show()
