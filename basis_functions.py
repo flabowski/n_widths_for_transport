@@ -52,7 +52,10 @@ class SVD(Basis):
     def __init__(self, X):
         # based on snapshots X
         U, S, VT = np.linalg.svd(X, full_matrices=False)
-        is_flipped = VT[:, 1] < 0
+        # is_flipped = VT[:, 1] < 0
+        # U[:, is_flipped] *= -1
+        # VT[is_flipped, :] *= -1
+        is_flipped = U[0, :] < 0
         U[:, is_flipped] *= -1
         VT[is_flipped, :] *= -1
         self.U = U
