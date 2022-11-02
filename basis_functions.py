@@ -24,6 +24,25 @@ def projection_error(X, basis):
     return rms(difference)
 
 
+def projection_error_new(X, basis):
+    difference = X - (basis @ basis.T) @ X
+    return difference
+
+
+def L2_per_snapshot(difference):
+    L2 = np.sum(difference**2, axis=0)**.5
+    return L2
+
+
+def L2(difference):
+    return np.sum(difference**2)**.5
+
+
+def integrate(x):
+    # assumes a-b = 1
+    return np.mean(x)
+
+
 class Basis:
     def __init__(self):
         return
@@ -36,14 +55,22 @@ class Basis:
         M, N = X_test.shape
         if not r_max:
             r_max = N if N < M else M
+        print("calc_error:", M, N, r_max)
         rms_error = np.zeros((r_max,))
         max_error = np.zeros((r_max,))
+        delta_n = np.zeros((r_max,))
+        L2norm = np.zeros((r_max,))
         for r in range(1, r_max//1, r_max//100):
             U_r = self.reduced_basis(rank=r)
-            L2 = projection_error(X_test, U_r)
-            rms_error[r] = np.sqrt(np.mean(L2**2))
-            max_error[r] = L2.max()
-        return rms_error, max_error
+            old_err = projection_error(X_test, U_r)
+            rms_error[r] = np.sqrt(np.mean(old_err**2))
+            max_error[r] = old_err.max()
+
+            diff = projection_error_new(X_test, U_r)
+            norm = L2_per_snapshot(diff)
+            delta_n[r] = integrate(norm)
+            L2norm[r] = L2(diff)
+        return rms_error, max_error, delta_n, L2norm
 
 
 class SVD(Basis):
@@ -76,6 +103,7 @@ class Trigonometric(Basis):
         T = domain.max-domain.min
         delta_x = domain.delta_x
         A = 2*delta_x**0.5 * np.sin(np.pi/4)
+        A = (2*delta_x)**.5
         x = domain()
         for i in range(r):
             omega = 2 * np.pi/(4*T) * (2*i+1)
