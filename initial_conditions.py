@@ -38,6 +38,20 @@ class Function:
             X[:, j] = self.u(x, mu_j)
         return X
 
+    def half_wave_odd(self, x, mu, old=False):
+        m, n = x.size, mu.size
+        X = np.zeros((m, n), dtype=np.float64)  # snapshot matrix
+        for j, mu_j in enumerate(mu):
+            l1 = (mu_j-1.0 < x) & (x <= mu_j-0.5)
+            l2 = (mu_j-0.5 < x) & (x <= mu_j+0.0)
+            l3 = (mu_j+0.0 < x) & (x <= mu_j+0.5)
+            l4 = (mu_j+0.5 < x) & (x <= mu_j+1.0)
+            X[l1, j] = -self.u(x[l1], mu_j+0.25-1.0)
+            X[l2, j] = -1+self.u(x[l2], mu_j+0.25-0.5)
+            X[l3, j] = self.u(x[l3], mu_j+0.25)
+            X[l4, j] = 1-self.u(x[l4], mu_j+0.25+0.5)
+        return X
+
     def u(self, x, mu):
         return
 
@@ -54,11 +68,11 @@ class Function:
         if not ax:
             fig, ax = plt.subplots()
         ax.plot(x, y, ".", **kwargs)
-        ax.set_xlabel("x")
-        ax.set_ylabel("u(x; mu={:.4f})".format(mu))
+        ax.set_xlabel("$x$")
+        ax.set_ylabel(r'$u(\mu; x)$')
         if not ax:
             plt.show()
-        return
+        return ax
 
     def fit_to(self, some_ramp, x):
         mu = self.most_central_mu(x)
@@ -72,6 +86,7 @@ class Function:
         popt, pcov = curve_fit(func, x, yy, [eps_guess])
         self.eps = popt[0]
         print("epsilon = ", self.eps)
+        print("cov = ", pcov)
         # y_hat = func(x, popt[0])
         fig, ax = plt.subplots()
         ax.plot(x, yy, "go")
@@ -88,9 +103,12 @@ class Heaviside(Function):
     def u(self, x, mu):
         y = np.zeros_like(x)
         y[x < mu] = 0.0
-        y[x == mu] = .5
         y[x > mu] = 1.0
+        y[abs(x-mu) < 1e-5] = .5
         return y
+
+    def fit_to(self, some_ramp, x):
+        return
 
 
 class LinearRamp(Function):
@@ -219,14 +237,28 @@ class Sigmoid(Function):
 
 if __name__ == "__main__":
     plt.close("all")
-    x = Domain([0, 1], 10000)
-    mu = Domain([0, 1], 100)
+    a, b = 400, 400
+    x = Domain([0, 1.0], a)
+    mu = Domain([0, 1], a)
+    # mu = Domain([-1.75, 2.25], a)
     u0 = CkRamp(0.025*2, 0)
     u1 = CkRamp(0.025*2, 1)
     u2 = CkRamp(0.025*2, 2)
     u3 = CkRamp(0.025*2, 3)
     u4 = CkRamp(0.025*2, 4)
-    u5 = CkRamp(0.025*2, 5)
+    u5 = CkRamp(0.25*2, 5)
+    us = Sigmoid(50)
+    X = us.half_wave_odd(x(), mu())
+    fig, ax1 = plt.subplots(1, 1, sharex=True, sharey=True)
+    ax1.imshow(X, interpolation="nearest")
+    plt.show()
+
+    xxx = np.linspace(-1, 1, 10000)
+    X = us.half_wave_odd(xxx, np.array([0.0]), ".-")
+    fig, ax = plt.subplots()
+    ax.plot(xxx, X)
+    plt.show()
+    asd
     for u in [u0, u1, u2, u3, u4, u5]:
         x_ = x()
         f_x = u(x_, .5)
