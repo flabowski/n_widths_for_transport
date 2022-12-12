@@ -7,21 +7,23 @@ Created on Tue Sep 13 14:24:29 2022
 import numpy as np
 from scipy.linalg import svd, orth, qr
 import matplotlib.pyplot as plt
+cmap = plt.cm.plasma
 import timeit
 
 
 def normalize(U):
-    U_n = U / np.sum(U**2, axis=0)**.5
+    # U_n = U / (np.sum(U**2, axis=1)**.5)[:, None]
+    U_n = U / (np.sum(U**2, axis=0)**.5)
     return U_n
 
 
 def projection_error(X, basis):
     a, b = X.shape
     a, r = basis.shape
-    if a < r:
+    if a <= r:
         difference = X - (basis @ basis.T) @ X  # (a, a) x a, b
         # ~ a*r*a + a*a*b
-    if r < a:
+    else:  # r < a:
         difference = X - basis @ (basis.T @ X)  # a, r x (r, b)
         # ~ r*a*b + a*r*b
     return difference
@@ -82,7 +84,7 @@ class SVD(Basis):
         # is_flipped = VT[:, 1] < 0
         # U[:, is_flipped] *= -1
         # VT[is_flipped, :] *= -1
-        is_flipped = U[0, :] < 0
+        is_flipped = U[1, :] < 0
         U[:, is_flipped] *= -1
         VT[is_flipped, :] *= -1
         self.U = U
@@ -94,20 +96,87 @@ class SVD(Basis):
 class Trigonometric(Basis):
     name = "trigonometric"
 
-    def __init__(self, domain, fun=np.sin, r=None):
+    def __init__(self, x, fun=np.sin, r=None):
         # based on analytic sine functions
-        m = domain.size
+        m = x.size
         if not r:
             r = m
-        U = np.zeros((m, r))
-        T = domain.max-domain.min
-        delta_x = domain.delta_x
+        U = np.ones((m, r+1))
+        delta_x = x[1] - x[0]
+        T = x[-1]-x[0]+delta_x
         A = 2*delta_x**0.5 * np.sin(np.pi/4)
         A = (2*delta_x)**.5
-        x = domain()
         for i in range(r):
             omega = 2 * np.pi/(4*T) * (2*i+1)
-            U[:, i] = A * fun(omega*x)
+            U[:, i+1] = A * fun(omega*x)
+        self.U = normalize(U)
+        return
+
+
+class Trigonometric2(Basis):
+    name = "trigonometric2"
+
+    def __init__(self, x, fun=np.sin, r=None):
+        # based on analytic sine functions
+        m = x.size
+        if not r:
+            r = m
+        U = np.ones((m, r))
+        delta_x = x[1] - x[0]
+        A = 2*delta_x**0.5 * np.sin(np.pi/4)
+        A = (2*delta_x)**.5
+        T = x[-1]-x[0]+delta_x
+        N = x.size
+        # Nyquist–Shannon sampling theorem
+        omega_max = 1/2 * 2*np.pi * N/T
+        for i in range(r):
+            # omega = i*np.pi
+            omega = np.pi * (2*i+1)
+            if omega <= omega_max:
+                U[:, i] = A * np.sin(omega*x)
+                # U[:, 2*i+2] = A * np.sin(omega*x)
+                # U[:, 2*i+3] = A * np.cos(omega*x)
+            else:
+                print(i, omega, omega_max)
+                U = U[:, :i]
+                # U = U[:, :2*i+2]
+                break
+            # U[:, i+r] = A * np.cos(omega*x)
+            # if i == 0:
+            #     U[:, i] = delta_x**.5
+        self.U = normalize(U)
+        return
+
+
+class TrigonometricAll(Basis):
+    name = "trigonometric_all"
+
+    def __init__(self, x, fun=np.sin, r=None):
+        # based on analytic sine functions
+        m = x.size
+        if not r:
+            r = m
+        U = np.ones((m, 2*r))
+        delta_x = x[1] - x[0]
+        A = 2*delta_x**0.5 * np.sin(np.pi/4)
+        A = (2*delta_x)**.5
+        # x = domain()
+        T = x[-1]-x[0]+delta_x
+        N = x.size
+        # Nyquist–Shannon sampling theorem
+        omega_max = 1/2 * 2*np.pi * N/T
+        for i in range(r):
+            omega = (2*i+1)/2 * 2*np.pi
+            if omega <= omega_max:
+                U[:, 2*i] = A * np.sin(omega*x)
+                U[:, 2*i+1] = A * np.cos(omega*x)
+            else:
+                print(i, omega, omega_max)
+                U = U[:, :(2*i)]
+                break
+            # U[:, i+r] = A * np.cos(omega*x)
+            # if i == 0:
+            #     U[:, i] = delta_x**.5
         self.U = normalize(U)
         return
 
@@ -204,8 +273,35 @@ class Sinc(Basis):
 
 
 if __name__ == "__main__":
-    from initial_conditions import Domain, Heaviside
     plt.close("all")
+    from initial_conditions import Domain, Heaviside
+    N = 100
+    x = Domain([-1, 1], N)
+    dx = 2/N
+    # x.x = np.linspace(-1, 1, N)
+    trig_basis = TrigonometricAll(x)
+    U = trig_basis.U#[:, :5]
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    ax1.imshow(U.T@U)
+    ax2.imshow(U@U.T)
+    
+    
+    # xf = Domain([-1, 1], 100*N)
+    # trig_basis = Trigonometric2(xf)
+    # U_fine = trig_basis.U#[:, :5]
+    
+    # fig, ax = plt.subplots()
+    # for i in range(N):
+    #     omega = 2 * np.pi/(4) * (2*i+1)
+    #     omega = np.pi * (2*i+1)
+    #     f = 1 * np.sin(omega*x())
+    #     ff = 1 * np.sin(omega*xf())
+    #     plt.plot(x(), f, "ro", label="i="+str(i), color=cmap(i/(N-1)))
+    #     plt.plot(xf(), ff, "--", color=cmap(i/(N-1)))
+    # plt.legend()
+    # plt.show()
+    asd
+    
     x = Domain([0, 1], 100)
     mu = Domain([0, 1], 100)
     u = Heaviside()
