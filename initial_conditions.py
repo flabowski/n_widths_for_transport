@@ -16,7 +16,8 @@ class Domain:
         self.min, self.max = bounds[0], bounds[1]
         T = self.max - self.min
         self.delta_x = dx = T/size
-        self.x = np.linspace(self.min+dx/2, self.max-dx/2, size)
+        # self.x = np.linspace(self.min+dx/2, self.max-dx/2, size)
+        self.x = np.linspace(self.min, self.max, size, endpoint=False)
         return
 
     def __call__(self):
@@ -38,7 +39,7 @@ class Function:
             X[:, j] = self.u(x, mu_j)
         return X
 
-    def half_wave_odd(self, x, mu, old=False):
+    def half_wave_odd_old(self, x, mu, old=False):
         m, n = x.size, mu.size
         X = np.zeros((m, n), dtype=np.float64)  # snapshot matrix
         for j, mu_j in enumerate(mu):
@@ -46,10 +47,44 @@ class Function:
             l2 = (mu_j-0.5 < x) & (x <= mu_j+0.0)
             l3 = (mu_j+0.0 < x) & (x <= mu_j+0.5)
             l4 = (mu_j+0.5 < x) & (x <= mu_j+1.0)
-            X[l1, j] = -self.u(x[l1], mu_j+0.25-1.0)
-            X[l2, j] = -1+self.u(x[l2], mu_j+0.25-0.5)
+            X[l1, j] = -self.u(x[l1], mu_j-0.75)
+            X[l2, j] = -1+self.u(x[l2], mu_j-0.25)
             X[l3, j] = self.u(x[l3], mu_j+0.25)
-            X[l4, j] = 1-self.u(x[l4], mu_j+0.25+0.5)
+            X[l4, j] = 1-self.u(x[l4], mu_j+0.75)
+        return X
+
+    def half_wave_odd(self, x, mu, old=False):
+        m, n = x.size, mu.size
+        X = np.zeros((m, n), dtype=np.float64)  # snapshot matrix
+        for j, mu_j in enumerate(mu):
+            i1 = (mu_j-1.0 < x) & (x <= mu_j-0.5)
+            i2 = (mu_j-.5 < x) & (x <= mu_j+0.5)
+            i3 = (mu_j+0.5 < x) & (x <= mu_j+1.0)
+            X[i1, j] = -self.u(x[i1]+1.0, mu_j)*2+1
+            X[i2, j] = self.u(x[i2], mu_j)*2-1
+            X[i3, j] = -self.u(x[i3]-1.0, mu_j)*2+1
+
+            # l1 = (mu_j-1.0 < x) & (x <= mu_j-0.5)
+            # l2 = (mu_j-0.5 < x) & (x <= mu_j+0.0)
+            # l3 = (mu_j+0.0 < x) & (x <= mu_j+0.5)
+            # l4 = (mu_j+0.5 < x) & (x <= mu_j+1.0)
+            # X[l1, j] = -self.u(x[l1], mu_j-0.75)
+            # X[l2, j] = -1+self.u(x[l2], mu_j-0.25)
+            # X[l3, j] = self.u(x[l3], mu_j+0.25)
+            # X[l4, j] = 1-self.u(x[l4], mu_j+0.75)
+        return X
+
+    def half_half_wave_odd(self, x, mu, old=False):
+        m, n = x.size, mu.size
+        X = np.zeros((m, n), dtype=np.float64)  # snapshot matrix
+        interface = self.u(np.array([-.5]), np.array([0.0]))
+        # interface = 0.0
+        # print(-1+self.u(-.5, 0.0-1.0), self.u(-.5, 0.0))
+        for j, mu_j in enumerate(mu):
+            l1 = x <= (mu_j - 0.5)
+            l2 = (mu_j - 0.5) < x
+            X[l1, j] = -1+self.u(x[l1], mu_j-1.0) + interface
+            X[l2, j] = self.u(x[l2], mu_j) - interface
         return X
 
     def u(self, x, mu):
@@ -164,7 +199,7 @@ class CkRamp(Function):
     def __init__(self, epsilon, k):
         self.eps = epsilon
         if k == 0:
-            self.name = "smooth ramp, C^0"
+            self.name = "linear ramp, C^0"
             self.u = self.u0
         elif k == 1:
             self.name = "smooth ramp, C^1"
@@ -223,8 +258,8 @@ class CkRamp(Function):
         return y
 
 
-class Sigmoid(Function):
-    name = "sigmoid"
+class Sigmoid_old(Function):
+    name = "sigmoid (exp)"
 
     def __init__(self, a):
         self.eps = 1/a
@@ -235,29 +270,80 @@ class Sigmoid(Function):
         return 1.0 / (1+np.e**(-(x-mu)*a))
 
 
+class Sigmoid(Function):
+    name = "sigmoid (sin)"
+
+    def __init__(self, epsilon, k=5):
+        self.eps = epsilon
+        self.k = k
+        assert k > 0, "k needs to be larger than 0"
+        return
+
+    def u(self, x, mu):
+        sin, pi = np.sin, np.pi
+        eps = self.eps
+        k = self.k
+        m = pi**k/2**k
+        y = sin(pi/2 * (x-mu)/m/eps)
+        for i in range(k-1):
+            y = sin(pi/2 * y)
+        # print(k, m*eps)
+        y = y/2+0.5
+        y[x < mu-m*eps] = 0
+        y[x > mu+m*eps] = 1
+        # y = (y+1)/2
+        return y
+
+
 if __name__ == "__main__":
-    plt.close("all")
-    a, b = 400, 400
-    x = Domain([0, 1.0], a)
-    mu = Domain([0, 1], a)
-    # mu = Domain([-1.75, 2.25], a)
+    # plt.close("all")
+    # a, b = 4000, 4000
+    # x = Domain([0, 1.0], a)
+    # mu = Domain([0, 1], a)
+    # # mu = Domain([-1.75, 2.25], a)
     u0 = CkRamp(0.025*2, 0)
     u1 = CkRamp(0.025*2, 1)
-    u2 = CkRamp(0.025*2, 2)
-    u3 = CkRamp(0.025*2, 3)
-    u4 = CkRamp(0.025*2, 4)
-    u5 = CkRamp(0.25*2, 5)
-    us = Sigmoid(50)
-    X = us.half_wave_odd(x(), mu())
-    fig, ax1 = plt.subplots(1, 1, sharex=True, sharey=True)
-    ax1.imshow(X, interpolation="nearest")
-    plt.show()
+    # u2 = CkRamp(0.025*2, 2)
+    # u3 = CkRamp(0.025*2, 3)
+    # u4 = CkRamp(0.025*2, 4)
+    # u5 = CkRamp(0.25*2, 5)
+    # us1 = Sigmoid(100)
+    # us2 = Sigmoid2(0.025, 5)
+
+    # X = u0.half_half_wave_odd(x(), mu())
+    # fig, ax1 = plt.subplots(1, 1, sharex=True, sharey=True)
+    # ax1.imshow(X, interpolation="nearest")
+    # plt.show()
 
     xxx = np.linspace(-1, 1, 10000)
-    X = us.half_wave_odd(xxx, np.array([0.0]), ".-")
+    # fig, ax = plt.subplots()
+    # ax.plot(xxx, us(xxx, np.array([0.0])), ".-")
+    # ax.plot(xxx, us(xxx, np.array([0.5])), ".-")
+    # plt.show()
+
+    # X = us.half_wave_odd(xxx, np.array([0.0]), ".-")
+    # X = us.half_wave_odd(xxx, np.array([0.0]), ".-")
     fig, ax = plt.subplots()
-    ax.plot(xxx, X)
+    ax.plot(xxx, u0.half_wave_odd(xxx, np.array([0.9]), ".-"))
+    ax.plot(xxx, u1.half_wave_odd(xxx, np.array([0.9]), ".-"))
     plt.show()
+
+    fig, ax = plt.subplots()
+    ax.plot(xxx, us1.half_wave_odd(xxx, np.array([0.0]), ".-"))
+    ax.plot(xxx, us2.half_wave_odd(xxx, np.array([0.0]), ".-"))
+    plt.xlim([0.4, 0.6])
+    plt.ylim([1-1e-10, 1+1e-10])
+    ax.ticklabel_format(useOffset=False)
+    plt.show()
+
+    fig, ax = plt.subplots()
+    ax.plot(xxx, us1.half_wave_odd(xxx, np.array([0.0]), ".-"))
+    ax.plot(xxx, us2.half_wave_odd(xxx, np.array([0.0]), ".-"))
+    plt.xlim([-0.1, 0.1])
+    plt.ylim([-1e-10, 1e-10])
+    ax.ticklabel_format(useOffset=False)
+    plt.show()
+    
     asd
     for u in [u0, u1, u2, u3, u4, u5]:
         x_ = x()
