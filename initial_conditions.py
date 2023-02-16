@@ -54,6 +54,8 @@ class Function:
         return X
 
     def half_wave_odd(self, x, mu, old=False):
+        if isinstance(mu, float):
+            mu = np.array([mu])
         m, n = x.size, mu.size
         X = np.zeros((m, n), dtype=np.float64)  # snapshot matrix
         for j, mu_j in enumerate(mu):
@@ -87,9 +89,6 @@ class Function:
             X[l2, j] = self.u(x[l2], mu_j) - interface
         return X
 
-    def u(self, x, mu):
-        return
-
     def most_central_mu(self, x):
         test_sample = x.size//2
         mu = x[test_sample]
@@ -98,8 +97,8 @@ class Function:
 
     def plot(self, x, ax=None, **kwargs):
         # print(kwargs)
-        mu = self.most_central_mu(x)
-        y = self.u(x, mu)
+        mu = np.array([self.most_central_mu(x)])
+        y = self.half_wave_odd(x, mu)
         if not ax:
             fig, ax = plt.subplots()
         ax.plot(x, y, ".", **kwargs)
@@ -124,8 +123,8 @@ class Function:
         print("cov = ", pcov)
         # y_hat = func(x, popt[0])
         fig, ax = plt.subplots()
-        ax.plot(x, yy, "go")
-        self.plot(x, ax)
+        ax.plot(x, yy, "ro")
+        self.plot(x, ax, ms=1)
         # ax.plot(x, y_hat, "r.")
         plt.xlim([0.45, 0.55])
         plt.show()
@@ -192,6 +191,7 @@ def move_x_intercept(u):
         return y
     return _impl
 
+            
 
 class CkRamp(Function):
     name = "C^k smooth ramp"
@@ -256,6 +256,99 @@ class CkRamp(Function):
         y = (-252/e**11*x**11 + 1386/e**10*x**10 - 3080/e**9*x**9
              + 3465/e**8*x**8 - 1980/e**7*x**7 + 462/e**6*x**6)
         return y
+    
+    def du5(self, x):
+        e = self.eps
+        dy = (- 252./e**11*x**6 * 11*10*9*8*7
+              + 1386/e**10*x**5 * 10*9*8*7*6
+              - 3080/e**9*x**4 * 9*8*7*6*5
+              + 3465/e**8*x**3 * 8*7*6*5*4
+              - 1980/e**7*x**2 * 7*6*5*4*3
+              + 462./e**6*x**1 * 6*5*4*3*2)
+        return dy
+
+def parameterize(u):
+    def _impl(self, x, mu):
+        x_ = x-mu
+        assert np.all(-1<=x_), "x must be in [-1, 1]"
+        assert np.all(x_<=1), "x must be in [-1, 1]"
+        # we need to call u directly, since self.u is wrapped
+        y = u(self, x_)
+        return y
+    return _impl
+
+class Polynoms(CkRamp):
+    name = "C^k smooth polynom"
+
+    @parameterize
+    def um1(self, x):
+        x_all = np.array(x)
+        y = np.empty_like(x)
+        x = x_all[x_all<0]
+        y[x_all<0] = -1
+        x = x_all[x_all>=0]
+        y[x_all>=0] = 1
+        return y
+
+    @parameterize
+    def u0(self, x):
+        x_all = np.array(x)
+        y = np.empty_like(x)
+        x = x_all[x_all<0]
+        y[x_all<0] = -x - 1/2
+        x = x_all[x_all>=0]
+        y[x_all>=0] = x - 1/2
+        return y
+
+    @parameterize
+    def u1(self, x):
+        x_all = np.array(x)
+        y = np.empty_like(x)
+        x = x_all[x_all<0]
+        y[x_all<0] = -x*(x + 1)/2
+        x = x_all[x_all>=0]
+        y[x_all>=0] = x*(x - 1)/2
+        return y
+
+    @parameterize
+    def u2(self, x):
+        x_all = np.array(x)
+        y = np.empty_like(x)
+        x = x_all[x_all<0]
+        y[x_all<0] = -x**3/6 - x**2/4 + 1/24
+        x = x_all[x_all>=0]
+        y[x_all>=0] = x**3/6 - x**2/4 + 1/24
+        return y
+
+    @parameterize
+    def u3(self, x):
+        x_all = np.array(x)
+        y = np.empty_like(x)
+        x = x_all[x_all<0]
+        y[x_all<0] = x*(-x**3 - 2*x**2 + 1)/24
+        x = x_all[x_all>=0]
+        y[x_all>=0] = x*(x**3 - 2*x**2 + 1)/24
+        return y
+
+    @parameterize
+    def u4(self, x):
+        x_all = np.array(x)
+        y = np.empty_like(x)
+        x = x_all[x_all<0]
+        y[x_all<0] = -x**5/120 - x**4/48 + x**2/48 - 1/240
+        x = x_all[x_all>=0]
+        y[x_all>=0] = x**5/120 - x**4/48 + x**2/48 - 1/240
+        return y
+
+    @parameterize
+    def u5(self, x):
+        x_all = np.array(x)
+        y = np.empty_like(x)
+        x = x_all[x_all<0]
+        y[x_all<0] = x*(-x**5 - 3*x**4 + 5*x**2 - 3)/720
+        x = x_all[x_all>=0]
+        y[x_all>=0] =x*(x**5 - 3*x**4 + 5*x**2 - 3)/720
+        return y
 
 
 class Sigmoid_old(Function):
@@ -281,18 +374,15 @@ class Sigmoid(Function):
 
     def u(self, x, mu):
         sin, pi = np.sin, np.pi
-        eps = self.eps
-        k = self.k
+        eps, k = self.eps, self.k
         m = pi**k/2**k
-        y = sin(pi/2 * (x-mu)/m/eps)
-        for i in range(k-1):
-            y = sin(pi/2 * y)
-        # print(k, m*eps)
-        y = y/2+0.5
-        y[x < mu-m*eps] = 0
-        y[x > mu+m*eps] = 1
-        # y = (y+1)/2
-        return y
+        x_ = (x-mu)/m*2/eps
+        for i in range(k):
+            y = sin(pi/2 * x_)
+            x_ = y
+        y[x < mu-m*eps/2] = -1
+        y[x > mu+m*eps/2] = 1
+        return y/2+0.5
 
 
 if __name__ == "__main__":
