@@ -80,6 +80,7 @@ class SVD(Basis):
 
     def __init__(self, X):
         # based on snapshots X
+        self.X = X
         U, S, VT = np.linalg.svd(X, full_matrices=False)
         # is_flipped = VT[:, 1] < 0
         # U[:, is_flipped] *= -1
@@ -92,6 +93,19 @@ class SVD(Basis):
         self.VT = VT
         return None
 
+    def calc_error(self, X_test=None, r_max=None, test=None):
+        m, n = self.U.shape[0], self.VT.shape[1]
+        if not isinstance(X_test, np.ndarray):
+            X_test = self.X
+        print(not isinstance(X_test, np.ndarray))
+        print(np.allclose(self.X, X_test))
+        if np.allclose(self.X, X_test):
+            delta_n = (np.cumsum(self.S[::-1]**2)[::-1]/m/n)**.5
+            delta_n = delta_n[:r_max]
+            d_N = np.zeros_like(delta_n)
+            return delta_n, d_N
+        else:
+            return super().calc_error(X_test, r_max)
 
 class Trigonometric(Basis):
     name = "trigonometric"
@@ -126,9 +140,9 @@ class Trigonometric2(Basis):
         A = 2*delta_x**0.5 * np.sin(np.pi/4)
         A = (2*delta_x)**.5
         T = x[-1]-x[0]+delta_x
-        N = x.size
+        a = x.size
         # Nyquist–Shannon sampling theorem
-        omega_max = 1/2 * 2*np.pi * N/T
+        omega_max = 1/2 * 2*np.pi * a/T
         for i in range(r):
             # omega = i*np.pi
             omega = np.pi * (2*i+1)
@@ -148,36 +162,31 @@ class Trigonometric2(Basis):
         return
 
 
-class TrigonometricAll(Basis):
+class TrigonometricOdd(Basis):
     name = "trigonometric_all"
 
     def __init__(self, x, fun=np.sin, r=None):
-        # based on analytic sine functions
         m = x.size
         if not r:
             r = m
-        U = np.ones((m, 2*r))
         delta_x = x[1] - x[0]
-        A = 2*delta_x**0.5 * np.sin(np.pi/4)
-        A = (2*delta_x)**.5
-        # x = domain()
+        A = (2*delta_x)**.5  # =2*delta_x**0.5 * np.sin(np.pi/4)
         T = x[-1]-x[0]+delta_x
         N = x.size
-        # Nyquist–Shannon sampling theorem
+        i = np.arange(r)
+        f = (2*i+1)/2
+        omega = f * 2*np.pi
         omega_max = 1/2 * 2*np.pi * N/T
-        for i in range(r):
-            omega = (2*i+1)/2 * 2*np.pi
-            if omega <= omega_max:
-                U[:, 2*i] = A * np.sin(omega*x)
-                U[:, 2*i+1] = A * np.cos(omega*x)
-            else:
-                print(i, omega, omega_max)
-                U = U[:, :(2*i)]
-                break
-            # U[:, i+r] = A * np.cos(omega*x)
-            # if i == 0:
-            #     U[:, i] = delta_x**.5
+        nyquist_shannon_sampling_theorem = omega <= omega_max
+        omega = omega[nyquist_shannon_sampling_theorem]
+        U = np.concatenate((A * np.sin(omega[None, :, None]*x[:, None, None]),
+                            A * np.cos(omega[None, :, None]*x[:, None, None])),
+                            axis=2).reshape(m, -2)
         self.U = normalize(U)
+        self.frequencies = f[nyquist_shannon_sampling_theorem]
+        self.A = A
+        self.delta_x = delta_x
+        self.x = x
         return
 
 
@@ -279,7 +288,7 @@ if __name__ == "__main__":
     x = Domain([-1, 1], N)
     dx = 2/N
     # x.x = np.linspace(-1, 1, N)
-    trig_basis = TrigonometricAll(x)
+    trig_basis = TrigonometricOdd(x())
     U = trig_basis.U#[:, :5]
     fig, (ax1, ax2) = plt.subplots(1, 2)
     ax1.imshow(U.T@U)
