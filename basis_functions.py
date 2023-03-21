@@ -5,10 +5,31 @@ Created on Tue Sep 13 14:24:29 2022
 @author: florianma
 """
 import numpy as np
+import scipy as sc
 from scipy.linalg import svd, orth, qr
 import matplotlib.pyplot as plt
 cmap = plt.cm.plasma
 import timeit
+
+
+def eigh_SVD(X):
+    m, n = X.shape
+    if m > n:
+        S, V = sc.linalg.eigh(X.T@X)
+        ll = S > 0
+        S = S[ll]
+        V = V[:, ll]
+        S = S**.5
+        U = np.matmul(X, V / S)
+        VT = V.T
+    else:
+        S, U = sc.linalg.eigh(X@X.T)
+        ll = S > 0
+        S = S[ll]
+        U = U[:, ll]
+        S = S**.5
+        VT = np.matmul(np.transpose(U) / S[:, None], X)
+    return U[:, ::-1], S[::-1], VT[::-1, :]
 
 
 def normalize(U):
@@ -58,7 +79,8 @@ class Basis:
         print("calc_error:", M, N, r_max)
         delta_n = np.zeros((r_max,), dtype=np.float64)
         d_n = np.zeros((r_max,), dtype=np.float64)
-        for r in range(1, r_max//1, r_max//100):
+        dr = int(r_max/200)*2  # 100 samples, only even r
+        for r in range(2, r_max, dr):
             print(r, end=", ")
             U_r = self.reduced_basis(rank=r)
 
@@ -71,17 +93,38 @@ class Basis:
             # norm = np.mean((X - basis @ (basis.T @ X))**2)**.5
             delta_n[r] = integrate(norm)
             d_n[r] = norm.max()
-        print()
+            if r in [2, 4, 6, 8, 10, 12 ,52, 952]:
+                fig, ax = plt.subplots()
+                ax.plot(norm, "b.", ms=1)
+                ax.plot(delta_n[r]*np.ones_like(norm), "g--")
+                ax.plot(d_n[r]*np.ones_like(norm), "r--")
+                #ax.set_ylim(0, norm.max()*1.2)
+                plt.show()
         return delta_n, d_n
+
+    def calc_error_analytic(self, X):
+        # https://stats.stackexchange.com/a/211693
+        a, b = X.shape
+        VT = self.U.T @ X  # (r, m) x (m, n)
+        S = np.sum(VT**2, axis=1)**.5  # (r, )
+        # fig, ax = plt.subplots()
+        # plt.plot(S)
+        # ax.set_yscale('log')
+        # #plt.show()
+        delta_n = (np.cumsum(S[::-1]**2)[::-1]/a/b)**.5
+        return delta_n, S
 
 
 class SVD(Basis):
     name = "svd"
 
-    def __init__(self, X):
+    def __init__(self, X, fast=False):
         # based on snapshots X
         self.X = X
-        U, S, VT = np.linalg.svd(X, full_matrices=False)
+        if fast:
+            U, S, VT = eigh_SVD(X)
+        else:
+            U, S, VT = np.linalg.svd(X, full_matrices=False)
         # is_flipped = VT[:, 1] < 0
         # U[:, is_flipped] *= -1
         # VT[is_flipped, :] *= -1
@@ -97,9 +140,6 @@ class SVD(Basis):
         m, n = self.U.shape[0], self.VT.shape[1]
         if not isinstance(X_test, np.ndarray):
             X_test = self.X
-        print(not isinstance(X_test, np.ndarray))
-        print(np.allclose(self.X, X_test))
-        if np.allclose(self.X, X_test):
             delta_n = (np.cumsum(self.S[::-1]**2)[::-1]/m/n)**.5
             delta_n = delta_n[:r_max]
             d_N = np.zeros_like(delta_n)
@@ -123,6 +163,30 @@ class Trigonometric(Basis):
         for i in range(r):
             omega = 2 * np.pi/(4*T) * (2*i+1)
             U[:, i+1] = A * fun(omega*x)
+        self.U = normalize(U)
+        return
+
+
+class Fourier(Basis):
+    name = "Fourier"
+    def __init__(self, x, r=None):
+        a = x.size
+        if not r:
+            r = a
+        U = np.ones((a, r*2))
+        delta_x = x[1] - x[0]
+        T = x[-1]-x[0]+delta_x
+        # Nyquist–Shannon sampling theorem
+        omega_max = 1/2 * 2*np.pi * a/T
+        for i in range(1, r):
+            omega = 2 * np.pi * i / T
+            if omega <= omega_max:
+                U[:, 2*i-1] = np.sin(omega*x)
+                U[:, 2*i] = np.cos(omega*x)
+            else:
+                print("Omega max!", i, omega, omega_max)
+                U = U[:, :2*(i-1)]
+                break
         self.U = normalize(U)
         return
 
