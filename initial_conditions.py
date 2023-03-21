@@ -11,13 +11,15 @@ from scipy.optimize import curve_fit
 
 class Domain:
     def __init__(self, bounds, size):
+        # nodes = np.linspace(0, 1, m+1, endpoint=True)
+        # elements = (nodes[1:] + nodes[:-1]) / 2
         self.bounds = bounds
         self.size = size
         self.min, self.max = bounds[0], bounds[1]
         T = self.max - self.min
         self.delta_x = dx = T/size
-        # self.x = np.linspace(self.min+dx/2, self.max-dx/2, size)
-        self.x = np.linspace(self.min, self.max, size, endpoint=False)
+        self.x = np.linspace(self.min+dx/2, self.max-dx/2, size)
+        #self.x = np.linspace(self.min, self.max, size, endpoint=False)
         return
 
     def __call__(self):
@@ -30,7 +32,11 @@ class Function:
     def __init__(self):
         return
 
-    def __call__(self, x, mu):
+    def __call__(self, x, mu, old=False):
+        return self.half_wave_odd(x, mu, old)
+
+    def get_snapshots(self, x, mu):
+        print("get_snapshots")
         if isinstance(mu, float):
             return self.u(x, mu)
         m, n = x.size, mu.size
@@ -95,15 +101,18 @@ class Function:
         print("mu_test = ", mu)
         return mu
 
-    def plot(self, x, ax=None, **kwargs):
+    def plot(self, x, ax=None, HWO=True, **kwargs):
         # print(kwargs)
-        mu = np.array([self.most_central_mu(x)])
-        y = self.half_wave_odd(x, mu)
+        x = np.linspace(-1, 1, 10000)
+        if HWO:
+            y = self.half_wave_odd(x, 0.0)
+        else:
+            y = self.u(x, 0.0)
         if not ax:
             fig, ax = plt.subplots()
-        ax.plot(x, y, ".", **kwargs)
+        ax.plot(x, y, **kwargs)
         ax.set_xlabel("$x$")
-        ax.set_ylabel(r'$u(\mu; x)$')
+        ax.set_ylabel(r'$g(x)$')
         if not ax:
             plt.show()
         return ax
@@ -115,19 +124,19 @@ class Function:
             self.eps = p
             return self.u(x, mu)
 
-        yy = some_ramp(x, mu)
+        yy = some_ramp.u(x, mu)
         eps_guess = 0.05
         popt, pcov = curve_fit(func, x, yy, [eps_guess])
         self.eps = popt[0]
         print("epsilon = ", self.eps)
         print("cov = ", pcov)
         # y_hat = func(x, popt[0])
-        fig, ax = plt.subplots()
-        ax.plot(x, yy, "ro")
-        self.plot(x, ax, ms=1)
-        # ax.plot(x, y_hat, "r.")
-        plt.xlim([0.45, 0.55])
-        plt.show()
+        # fig, ax = plt.subplots()
+        # ax.plot(x, yy, "ro")
+        # #self.plot(x, ax, ms=1)
+        # ax.plot(x, y_hat, "g.")
+        # plt.xlim([0.45, 0.55])
+        # plt.show()
         return
 
 
@@ -182,6 +191,7 @@ class SmoothRamp(Function):
 
 
 def move_x_intercept(u):
+    
     def _impl(self, x, mu):
         x_ = x-mu+self.eps/2
         # we need to call u directly, since self.u is wrapped
@@ -199,22 +209,22 @@ class CkRamp(Function):
     def __init__(self, epsilon, k):
         self.eps = epsilon
         if k == 0:
-            self.name = "linear ramp, C^0"
+            self.name = "linear ramp, $C^0$"
             self.u = self.u0
         elif k == 1:
-            self.name = "smooth ramp, C^1"
+            self.name = "smooth ramp, $C^1$"
             self.u = self.u1
         elif k == 2:
-            self.name = "smooth ramp, C^2"
+            self.name = "smooth ramp, $C^2$"
             self.u = self.u2
         elif k == 3:
-            self.name = "smooth ramp, C^3"
+            self.name = "smooth ramp, $C^3$"
             self.u = self.u3
         elif k == 4:
-            self.name = "smooth ramp, C^4"
+            self.name = "smooth ramp, $C^4$"
             self.u = self.u4
         elif k == 5:
-            self.name = "smooth ramp, C^5"
+            self.name = "smooth ramp, $C^5$"
             self.u = self.u5
         else:
             raise NotImplementedError
@@ -277,11 +287,97 @@ def parameterize(u):
         return y
     return _impl
 
-class Polynoms(CkRamp):
-    name = "C^k smooth polynom"
 
-    @parameterize
-    def um1(self, x):
+
+# class Polynoms(CkRamp):
+#     name = "C^k smooth polynom"
+
+#     def __init__(self, k):
+#         # epsilon
+#         if k == -1:
+#             self.name = "Heaviside"
+#             self.u = self.um1
+#         else:
+#             # just gives a name and assines the right subroutines
+#             super.__init__(0, k)
+
+class Polynomial():
+
+    def __call__(self, x, mu):
+        if isinstance(mu, float):
+            return self.u(x, mu)
+        m, n = x.size, mu.size
+        X = np.zeros((m, n))  # snapshot matrix
+        for j, mu_j in enumerate(mu):
+            X[:, j] = self.u(x, mu_j)
+        return X
+
+    def u(self, x, mu):
+        """
+        Parameters
+        ----------
+        x : array_like
+            1-D array representing the coordinates of a grid [0, 1].
+        mu : array_like
+            1-D array representing the coordinates of a grid [0, 1].
+
+        Returns
+        -------
+        X : ndarray
+            Snapshot matrix, shaped (len(x), len(mu)).
+            Each snapshot is half-wave odd symmetric, guaranteed by definition!
+        """
+        x_ = x-mu
+        assert np.all(-1 <= x_), "x must be in [-1, 1]"
+        assert np.all(x_ <= 1), "x must be in [-1, 1]"
+        y = self.q(x_)
+        return y
+    
+    def q(self, x):
+        """
+        Parameters
+        ----------
+        x : ndarray
+            1-D array representing the coordinates of a grid [-1, 1].
+
+        Returns
+        -------
+        y : ndarray
+            the jump.
+        """
+        raise NotImplementedError("the jump q is not implemented")
+
+    def plot_u(self, mu=None, ax=None, **kwargs):
+        x = np.linspace(0, 1, 1001)
+        if mu == None:
+            mu = 0.5
+        y = self.u(x, mu)
+        if ax == None:
+            fig, ax = plt.subplots()
+        ax.plot(x, y, **kwargs)
+        ax.set_xlabel("$x$")
+        ax.set_ylabel(r'$u(\mu; x)$')
+        if not ax:
+            plt.show()
+        return ax
+
+    def plot_q(self, ax=None, **kwargs):
+        # print(kwargs)
+        # mu = np.array([self.most_central_mu(x)])
+        x = np.linspace(-1, 1, 1001)
+        y = self.q(x)
+        if not ax:
+            fig, ax = plt.subplots()
+        ax.plot(x, y, **kwargs)
+        ax.set_xlabel("$x$")
+        ax.set_ylabel(self.name+r'$(x)$')
+        if not ax:
+            plt.show()
+        return ax
+
+class Polynom_Cm1(Polynomial):
+    name = r'$g_{-1}$'
+    def q(self, x):
         x_all = np.array(x)
         y = np.empty_like(x)
         x = x_all[x_all<0]
@@ -290,8 +386,9 @@ class Polynoms(CkRamp):
         y[x_all>=0] = 1
         return y
 
-    @parameterize
-    def u0(self, x):
+class Polynom_C0(Polynomial):
+    name = r'$g_0$'
+    def q(self, x):
         x_all = np.array(x)
         y = np.empty_like(x)
         x = x_all[x_all<0]
@@ -300,8 +397,9 @@ class Polynoms(CkRamp):
         y[x_all>=0] = x - 1/2
         return y
 
-    @parameterize
-    def u1(self, x):
+class Polynom_C1(Polynomial):
+    name = r'$g_1$'
+    def q(self, x):
         x_all = np.array(x)
         y = np.empty_like(x)
         x = x_all[x_all<0]
@@ -310,8 +408,9 @@ class Polynoms(CkRamp):
         y[x_all>=0] = x*(x - 1)/2
         return y
 
-    @parameterize
-    def u2(self, x):
+class Polynom_C2(Polynomial):
+    name = r'$g_2$'
+    def q(self, x):
         x_all = np.array(x)
         y = np.empty_like(x)
         x = x_all[x_all<0]
@@ -320,8 +419,9 @@ class Polynoms(CkRamp):
         y[x_all>=0] = x**3/6 - x**2/4 + 1/24
         return y
 
-    @parameterize
-    def u3(self, x):
+class Polynom_C3(Polynomial):
+    name = r'$g_3$'
+    def q(self, x):
         x_all = np.array(x)
         y = np.empty_like(x)
         x = x_all[x_all<0]
@@ -330,8 +430,9 @@ class Polynoms(CkRamp):
         y[x_all>=0] = x*(x**3 - 2*x**2 + 1)/24
         return y
 
-    @parameterize
-    def u4(self, x):
+class Polynom_C4(Polynomial):
+    name = r'$g_4$'
+    def q(self, x):
         x_all = np.array(x)
         y = np.empty_like(x)
         x = x_all[x_all<0]
@@ -340,8 +441,9 @@ class Polynoms(CkRamp):
         y[x_all>=0] = x**5/120 - x**4/48 + x**2/48 - 1/240
         return y
 
-    @parameterize
-    def u5(self, x):
+class Polynom_C5(Polynomial):
+    name = r'$g_5$'
+    def q(self, x):
         x_all = np.array(x)
         y = np.empty_like(x)
         x = x_all[x_all<0]
@@ -364,7 +466,7 @@ class Sigmoid_old(Function):
 
 
 class Sigmoid(Function):
-    name = "sigmoid (sin)"
+    name = "sigmoid, $C^\infty$"
 
     def __init__(self, epsilon, k=5):
         self.eps = epsilon
