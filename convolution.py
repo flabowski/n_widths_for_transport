@@ -14,7 +14,7 @@ cmap = plt.cm.plasma
 from initial_conditions import Domain, Heaviside, LinearRamp, SmoothRamp, Sigmoid, CkRamp
 from basis_functions import SVD, Trigonometric, Greedy, LNA, LPF, Sinc
 
-mult = 100
+mult = 1
 
 m, n, r = 10*mult, 10*mult, 10*mult
 x = Domain([0, 1], m)
@@ -46,7 +46,7 @@ for i in range(r):
     omega = 2 * np.pi/(4*T) * (2*i+1)
     U4[:, i] = A * np.sin(omega*x4())
     VT4[i, :] = A * np.cos(omega*mu4())
-    if i<10:
+    if i < 10:
         ax1.plot(x(), U[:, i], "o-")
         ax1.plot(x4(), U4[:, i], ".-")
         ax2.plot(mu(), VT[i, :])
@@ -68,17 +68,18 @@ fig, ax_S = plt.subplots()
 X4_smoothened = X4_repaired.copy()
 kernel = np.ones((3, 3), dtype=np.float64)
 kernel /= kernel.size
-for i in range(10):
-    X4_smoothened = convolve2d(X4_smoothened, kernel, boundary='symm', mode='same')
-
+for j in range(6):
+    print(j)
     fig, ax = plt.subplots()
     ax.imshow(X4_smoothened, interpolation="nearest", vmin=-1.0, vmax=1.0)
     plt.show()
-
     for i in [0*mult, 5*mult, 9*mult]:
         ax_ss.plot(x(), X[:, i], "o-")
         ax_ss.plot(x4(), X4_smoothened[:, i], ".-")
         # plt.plot(x4(), X44[:, i], ".-")
+
+    X4_smoothened = convolve2d(X4_smoothened, kernel,
+                               boundary='symm', mode='same')
 
     svd_basis = SVD(X4_smoothened)
     U44 = svd_basis.U

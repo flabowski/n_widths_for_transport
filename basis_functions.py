@@ -93,7 +93,7 @@ class Basis:
             # norm = np.mean((X - basis @ (basis.T @ X))**2)**.5
             delta_n[r] = integrate(norm)
             d_n[r] = norm.max()
-            if r in [2, 4, 6, 8, 10, 12 ,52, 952]:
+            if r in []: #[2, 4, 6, 8, 10, 12 ,52, 952]:
                 fig, ax = plt.subplots()
                 ax.plot(norm, "b.", ms=1)
                 ax.plot(delta_n[r]*np.ones_like(norm), "g--")
@@ -165,6 +165,27 @@ class Trigonometric(Basis):
             U[:, i+1] = A * fun(omega*x)
         self.U = normalize(U)
         return
+
+    def sort(self, X, PLOT=True):
+        m,n = self.shape
+        V_k = self.U.reshape(m, -1, 2)  # x, r, 2
+        V_1 = V_k[:, :, 0].copy()  # sin
+        c = V_1.T @ X  # V_1.T @ X is slow!
+        c_n = (c**2).sum(axis=1)
+        order = np.argsort(-c_n)
+        if PLOT:
+            V_1 = V_k[:, :, 1].copy()  # sin
+            # c2 = V_1.T @ X  # V_1.T @ X is slow!
+            c_n2 = (c**2).sum(axis=1)
+            fig, ax = plt.subplots()
+            ax.plot(self.frequencies, c_n**.5, ".", ms=1)
+            ax.plot(self.frequencies, c_n2**.5, ".", ms=1)
+            ax.set_yscale('log')
+            plt.show()
+        self.U = V_k[:, order, :].reshape(m, -1)
+        self.frequencies = self.frequencies[order]
+        print("sorted.")
+        return None
 
 
 class Fourier(Basis):

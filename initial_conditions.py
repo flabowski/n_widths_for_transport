@@ -359,6 +359,7 @@ class Polynomial():
         ax.set_ylabel(r'$u(\mu; x)$')
         if not ax:
             plt.show()
+        plt.grid()
         return ax
 
     def plot_q(self, ax=None, **kwargs):
@@ -373,6 +374,7 @@ class Polynomial():
         ax.set_ylabel(self.name+r'$(x)$')
         if not ax:
             plt.show()
+        plt.grid()
         return ax
 
 class Polynom_Cm1(Polynomial):
