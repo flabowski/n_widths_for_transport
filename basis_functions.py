@@ -6,10 +6,10 @@ Created on Tue Sep 13 14:24:29 2022
 """
 import numpy as np
 import scipy as sc
-from scipy.linalg import svd, orth, qr
+from scipy.linalg import qr
 import matplotlib.pyplot as plt
 cmap = plt.cm.plasma
-import timeit
+# import timeit
 
 
 def eigh_SVD(X):
@@ -93,12 +93,12 @@ class Basis:
             # norm = np.mean((X - basis @ (basis.T @ X))**2)**.5
             delta_n[r] = integrate(norm)
             d_n[r] = norm.max()
-            if r in []: #[2, 4, 6, 8, 10, 12 ,52, 952]:
+            if r in []:  # [2, 4, 6, 8, 10, 12 ,52, 952]:
                 fig, ax = plt.subplots()
                 ax.plot(norm, "b.", ms=1)
                 ax.plot(delta_n[r]*np.ones_like(norm), "g--")
                 ax.plot(d_n[r]*np.ones_like(norm), "r--")
-                #ax.set_ylim(0, norm.max()*1.2)
+                # ax.set_ylim(0, norm.max()*1.2)
                 plt.show()
         return delta_n, d_n
 
@@ -147,6 +147,7 @@ class SVD(Basis):
         else:
             return super().calc_error(X_test, r_max)
 
+
 class Trigonometric(Basis):
     name = "trigonometric"
 
@@ -166,30 +167,10 @@ class Trigonometric(Basis):
         self.U = normalize(U)
         return
 
-    def sort(self, X, PLOT=True):
-        m,n = self.shape
-        V_k = self.U.reshape(m, -1, 2)  # x, r, 2
-        V_1 = V_k[:, :, 0].copy()  # sin
-        c = V_1.T @ X  # V_1.T @ X is slow!
-        c_n = (c**2).sum(axis=1)
-        order = np.argsort(-c_n)
-        if PLOT:
-            V_1 = V_k[:, :, 1].copy()  # sin
-            # c2 = V_1.T @ X  # V_1.T @ X is slow!
-            c_n2 = (c**2).sum(axis=1)
-            fig, ax = plt.subplots()
-            ax.plot(self.frequencies, c_n**.5, ".", ms=1)
-            ax.plot(self.frequencies, c_n2**.5, ".", ms=1)
-            ax.set_yscale('log')
-            plt.show()
-        self.U = V_k[:, order, :].reshape(m, -1)
-        self.frequencies = self.frequencies[order]
-        print("sorted.")
-        return None
-
 
 class Fourier(Basis):
     name = "Fourier"
+
     def __init__(self, x, r=None):
         a = x.size
         if not r:
@@ -266,13 +247,38 @@ class TrigonometricOdd(Basis):
         omega = omega[nyquist_shannon_sampling_theorem]
         U = np.concatenate((A * np.sin(omega[None, :, None]*x[:, None, None]),
                             A * np.cos(omega[None, :, None]*x[:, None, None])),
-                            axis=2).reshape(m, -2)
+                           axis=2).reshape(m, -2)
         self.U = normalize(U)
         self.frequencies = f[nyquist_shannon_sampling_theorem]
         self.A = A
         self.delta_x = delta_x
         self.x = x
         return
+
+    def sort(self, X, plot=True):
+        # Corollary 4.6 (sorting of the projection terms)
+        m, n = self.U.shape
+        V_k = self.U.reshape(m, -1, 2)  # x, r, 2
+        V_1 = V_k[:, :, 0].copy()  # sin
+        c = V_1.T @ X  # V_1.T @ X is slow!
+        c_n = (c**2).sum(axis=1)
+        order = np.argsort(-c_n)
+        if plot:
+            V_2 = V_k[:, :, 1].copy()  # cos
+            c2 = V_2.T @ X  # V_1.T @ X is slow!
+            c_n2 = (c2**2).sum(axis=1)
+            fig, ax = plt.subplots()
+            ax.plot(self.frequencies, c_n**.5, ".", ms=1, label="sin terms")
+            ax.plot(self.frequencies, c_n2**.5, ".", ms=1, label="cos terms")
+            ax.set_yscale('log')
+            ax.set_xlabel("frequency $f$")
+            ax.set_ylabel("norm of the projection terms")
+            plt.legend()
+            plt.show()
+        self.U = V_k[:, order, :].reshape(m, -1)
+        self.frequencies = self.frequencies[order]
+        # print("sorted.")
+        return None
 
 
 class Greedy(Basis):
